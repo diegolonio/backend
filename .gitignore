@@ -1,0 +1,10 @@
+.claude/
+.idea/
+.vscode/
+.ipynb_checkpoints/
+__pycache__/
+*.pyc
+venv/
+.venv/
+.env/
+*.log
