@@ -4,4 +4,7 @@ version = "0.1.0"
 description = "The repository for my backend practice"
 readme = "README.md"
 requires-python = ">=3.14"
-dependencies = []
+dependencies = [
+    "fastapi[standard]>=0.141.1",
+    "scalar-fastapi>=1.8.2",
+]
