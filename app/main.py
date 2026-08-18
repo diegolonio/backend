@@ -47,27 +47,26 @@ shipments = {
     }
 }
 
-@app.get("/shipment/{field}")
-def get_shipment_field(field: str, shipment_id: int) -> Any:
-    return shipments[shipment_id][field]
-
-# Query parameters
-# Example /shipment?shipment_id=12800
-@app.get("/shipment")
-def get_shipment_query(shipment_id: int|None = None) -> dict[str, Any]:
-    if not shipment_id:
-        shipment_id = max(shipments.keys())
-        return shipments[shipment_id]
-
+@app.get("/shipments/{shipment_id}")
+def get_shipment(shipment_id: int, field: str|None = None) -> dict[str, Any]|Any:
     if shipment_id not in shipments:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="The given shipment id does not exist"
+            detail="Given ID shipment does not exist."
         )
+
+    if field not in (None, ""):
+        if field not in shipments[shipment_id]:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Given field does not exist."
+            )
+
+        return shipments[shipment_id][field]
 
     return shipments[shipment_id]
 
-@app.post("/shipment")
+@app.post("/shipments", status_code=status.HTTP_201_CREATED)
 def submit_shipment(data: dict[str, Any]) -> dict[str, int]:
 
     if not all(key in data for key in ["weight", "content", "status"]):
@@ -82,7 +81,7 @@ def submit_shipment(data: dict[str, Any]) -> dict[str, int]:
 
     if weight > 25.0 or weight < 0.0:
         raise HTTPException(
-            status_code=status.HTTP_406_NOT_ACCEPTABLE,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="Maximum weight limit is 25kg"
         )
 
@@ -96,17 +95,51 @@ def submit_shipment(data: dict[str, Any]) -> dict[str, int]:
 
     return {"id": new_id}
 
-# Path paramete
-# Example /shipment/12800
-@app.get("/shipment/{shipment_id}")
-def get_shipment_path(shipment_id: int) -> dict[str, Any]:
+@app.put("/shipments/{shipment_id}")
+def update_shipment(shipment_id: int, shipment_data: dict[str, Any]) -> dict[str, Any]:
     if shipment_id not in shipments:
-        return {
-            "detail": "The given shipment id does not exist"
-        }
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Given ID shipment does not exist."
+        )
+
+    if not all(key in shipment_data for key in ["weight", "content", "status"]):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="All fields are required"
+        )
+
+    shipments[shipment_id] = {
+        "weight": shipment_data["weight"],
+        "content": shipment_data["content"],
+        "status": shipment_data["status"]
+    }
 
     return shipments[shipment_id]
 
+@app.patch("/shipments/{shipment_id}")
+def patch_shipment(shipment_id: int, shipment_data: dict[str, Any]) -> dict[str, Any]:
+    if shipment_id not in shipments:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Given ID shipment does not exist."
+        )
+
+    shipments[shipment_id].update(shipment_data)
+
+    return shipments[shipment_id]
+
+@app.delete("/shipments/{shipment_id}", status_code=status.HTTP_200_OK)
+def delete_shipment(shipment_id: int) -> dict[str, str]:
+    if shipment_id not in shipments:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Given ID shipment does not exist."
+        )
+
+    shipments.pop(shipment_id)
+
+    return {"detail": f"Shipment #{shipment_id} deleted"}
 
 
 # Scalar documentation
