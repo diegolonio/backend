@@ -1,6 +1,7 @@
-from typing import Any
-from fastapi import FastAPI, status, HTTPException
+from typing import Any, Annotated, Literal
+from fastapi import FastAPI, status, HTTPException, Query
 from scalar_fastapi import get_scalar_api_reference
+from app.schemas import Shipment
 
 app = FastAPI()
 
@@ -48,50 +49,25 @@ shipments = {
 }
 
 @app.get("/shipments/{shipment_id}")
-def get_shipment(shipment_id: int, field: str|None = None) -> dict[str, Any]|Any:
+def get_shipment(
+        shipment_id: int,
+        field: Annotated[Literal["content", "weight", "status", "destination"]|None, Query()] = None
+) -> Shipment|str|float|int:
     if shipment_id not in shipments:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Given ID shipment does not exist."
         )
 
-    if field not in (None, ""):
-        if field not in shipments[shipment_id]:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Given field does not exist."
-            )
-
+    if field is not None:
         return shipments[shipment_id][field]
 
-    return shipments[shipment_id]
+    return Shipment(**shipments[shipment_id])
 
 @app.post("/shipments", status_code=status.HTTP_201_CREATED)
-def submit_shipment(data: dict[str, Any]) -> dict[str, int]:
-
-    if not all(key in data for key in ["weight", "content", "status"]):
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail="All fields are required"
-        )
-
-    weight = data["weight"]
-    content = data["content"]
-    shipment_status = data["status"]
-
-    if weight > 25.0 or weight < 0.0:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail="Maximum weight limit is 25kg"
-        )
-
+def submit_shipment(shipment: Shipment) -> dict[str, int]:
     new_id = max(shipments.keys()) + 1
-
-    shipments[new_id] = {
-        "content": content,
-        "weight": weight,
-        "status": shipment_status
-    }
+    shipments[new_id] = shipment.model_dump()
 
     return {"id": new_id}
 
