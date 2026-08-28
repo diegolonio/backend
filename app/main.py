@@ -1,120 +1,142 @@
-from typing import Any, Annotated, Literal
-from fastapi import FastAPI, status, HTTPException, Query
+from typing import Annotated, Literal
+from fastapi import FastAPI, status, HTTPException, Query, Depends, Response
 from scalar_fastapi import get_scalar_api_reference
-from app.schemas import Shipment
+from app.schemas import Shipment, ShipmentPatch, ShipmentGet, ShipmentStatus
+from psycopg import Connection, sql
+from psycopg.rows import class_row
+from app.database import get_connection
 
 app = FastAPI()
 
-shipments = {
-    12798: {
-        "weight": 0.6,
-        "content": "glassware",
-        "status": "placed"
-    },
-    12799: {
-        "weight": 1.2,
-        "content": "electronics",
-        "status": "shipped"
-    },
-    12800: {
-        "weight": 0.3,
-        "content": "documents",
-        "status": "delivered"
-    },
-    12801: {
-        "weight": 5.4,
-        "content": "machinery parts",
-        "status": "in_transit"
-    },
-    12802: {
-        "weight": 2.1,
-        "content": "textiles",
-        "status": "placed"
-    },
-    12803: {
-        "weight": 0.8,
-        "content": "ceramics",
-        "status": "pending"
-    },
-    12804: {
-        "weight": 12.0,
-        "content": "furniture",
-        "status": "delivered"
-    },
-    12805: {
-        "weight": 0.1,
-        "content": "office supplies",
-        "status": "shipped"
-    }
-}
+def existing_shipment_id(shipment_id: int, conn: Annotated[Connection, Depends(get_connection)]) -> int:
+    with conn.cursor() as cur:
+        cur.execute("SELECT 1 FROM shipments WHERE id = %s", (shipment_id,))
+        if cur.fetchone() is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Given ID shipment does not exist."
+            )
+    return shipment_id
+
+@app.get("/shipments")
+def get_shipments(
+        conn: Annotated[Connection, Depends(get_connection)],
+        destination: int|None = None,
+        shipment_status: Annotated[ShipmentStatus|None, Query(alias="status")] = None,
+) -> list[ShipmentGet]:
+    conditions: list[sql.Composable] = []
+    params: list[object] = []
+
+    if destination is not None:
+        conditions.append(sql.SQL("destination = %s"))
+        params.append(destination)
+
+    if shipment_status is not None:
+        conditions.append(sql.SQL("status = %s"))
+        params.append(shipment_status.value)
+
+    parts: list[sql.Composable] = [sql.SQL("SELECT id, content, weight, status, destination FROM shipments")]
+
+    if conditions:
+        parts.append(sql.SQL("WHERE"))
+        parts.append(sql.SQL(" AND ").join(conditions))
+
+    parts.append(sql.SQL("ORDER BY id"))
+
+    with conn.cursor() as cur:
+        cur.execute(sql.SQL(" ").join(parts), params)
+        return cur.fetchall()
 
 @app.get("/shipments/{shipment_id}")
 def get_shipment(
-        shipment_id: int,
-        field: Annotated[Literal["content", "weight", "status", "destination"]|None, Query()] = None
-) -> Shipment|str|float|int:
-    if shipment_id not in shipments:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Given ID shipment does not exist."
-        )
+        shipment_id: Annotated[int, Depends(existing_shipment_id)],
+        conn: Annotated[Connection, Depends(get_connection)]
+) -> ShipmentGet:
+    with conn.cursor(row_factory=class_row(ShipmentGet)) as cur:
+        cur.execute("SELECT id, content, weight, status, destination FROM shipments WHERE id = %s", (shipment_id,))
+        return cur.fetchone()
 
-    if field is not None:
-        return shipments[shipment_id][field]
-
-    return Shipment(**shipments[shipment_id])
+@app.get("/shipments/{shipment_id}/{field}")
+def get_shipment_field(
+        shipment_id: Annotated[int, Depends(existing_shipment_id)],
+        field: Literal["content", "weight", "status", "destination"],
+        conn: Annotated[Connection, Depends(get_connection)]
+) -> str|float|int:
+    with conn.cursor() as cur:
+        cur.execute("SELECT id, content, weight, status, destination FROM shipments WHERE id = %s", (shipment_id,))
+        return cur.fetchone()[field]
 
 @app.post("/shipments", status_code=status.HTTP_201_CREATED)
-def submit_shipment(shipment: Shipment) -> dict[str, int]:
-    new_id = max(shipments.keys()) + 1
-    shipments[new_id] = shipment.model_dump()
-
-    return {"id": new_id}
+def submit_shipment(
+        shipment: Shipment,
+        conn: Annotated[Connection, Depends(get_connection)],
+        response: Response) -> ShipmentGet:
+    with conn.cursor(row_factory=class_row(ShipmentGet)) as cur:
+        cur.execute(
+            """
+            INSERT INTO shipments (content, weight, status, destination)
+            VALUES (%(content)s, %(weight)s, %(status)s,
+                    %(destination)s) RETURNING id, content, weight, status, destination
+            """,
+            shipment.model_dump(mode="json"),
+        )
+        created: ShipmentGet = cur.fetchone()
+    response.headers["Location"] = f"/shipments/{created.id}"
+    return created
 
 @app.put("/shipments/{shipment_id}")
-def update_shipment(shipment_id: int, shipment_data: dict[str, Any]) -> dict[str, Any]:
-    if shipment_id not in shipments:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Given ID shipment does not exist."
+def update_shipment(
+        shipment_id: Annotated[int, Depends(existing_shipment_id)],
+        shipment: Shipment,
+        conn: Annotated[Connection, Depends(get_connection)]
+) -> ShipmentGet:
+    with conn.cursor(row_factory=class_row(ShipmentGet)) as cur:
+        cur.execute(
+            """
+            UPDATE shipments
+            SET content = %(content)s, weight = %(weight)s,
+                status = %(status)s, destination = %(destination)s
+            WHERE id = %(shipment_id)s
+            RETURNING id, content, weight, status, destination
+            """,
+            {**shipment.model_dump(mode="json"), "shipment_id": shipment_id},
         )
-
-    if not all(key in shipment_data for key in ["weight", "content", "status"]):
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail="All fields are required"
-        )
-
-    shipments[shipment_id] = {
-        "weight": shipment_data["weight"],
-        "content": shipment_data["content"],
-        "status": shipment_data["status"]
-    }
-
-    return shipments[shipment_id]
+        return cur.fetchone()
 
 @app.patch("/shipments/{shipment_id}")
-def patch_shipment(shipment_id: int, shipment_data: dict[str, Any]) -> dict[str, Any]:
-    if shipment_id not in shipments:
+def patch_shipment(
+        shipment_id: Annotated[int, Depends(existing_shipment_id)],
+        shipment_patch: ShipmentPatch,
+        conn: Annotated[Connection, Depends(get_connection)]
+) -> ShipmentGet:
+    changes = shipment_patch.model_dump(mode="json", exclude_unset=True)
+
+    if not changes:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Given ID shipment does not exist."
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="No fields to update."
         )
 
-    shipments[shipment_id].update(shipment_data)
+    assignments = sql.SQL(", ").join(
+        sql.SQL("{} = {}").format(sql.Identifier(field), sql.Placeholder(field)) for field in changes
+    )
 
-    return shipments[shipment_id]
+    query = sql.SQL(
+        """UPDATE shipments SET {assignments} WHERE id = %(shipment_id)s
+           RETURNING id, content, weight, status, destination"""
+    ).format(assignments=assignments)
+
+    with conn.cursor(row_factory=class_row(ShipmentGet)) as cur:
+        cur.execute(query, {**changes, "shipment_id": shipment_id})
+        return cur.fetchone()
 
 @app.delete("/shipments/{shipment_id}", status_code=status.HTTP_200_OK)
-def delete_shipment(shipment_id: int) -> dict[str, str]:
-    if shipment_id not in shipments:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Given ID shipment does not exist."
-        )
-
-    shipments.pop(shipment_id)
-
+def delete_shipment(
+        shipment_id: Annotated[int, Depends(existing_shipment_id)],
+        conn: Annotated[Connection, Depends(get_connection)]
+) -> dict[str, str]:
+    with conn.cursor() as cur:
+        cur.execute("DELETE FROM shipments WHERE id = %s", (shipment_id,))
     return {"detail": f"Shipment #{shipment_id} deleted"}
 
 
