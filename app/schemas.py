@@ -1,5 +1,7 @@
 from enum import StrEnum
+from typing import Annotated
 from pydantic import BaseModel, Field
+
 
 class ShipmentStatus(StrEnum):
     PLACED = "placed"
@@ -8,17 +10,34 @@ class ShipmentStatus(StrEnum):
     IN_TRANSIT = "in_transit"
     DELIVERED = "delivered"
 
-class Shipment(BaseModel):
-    content: str = Field(max_length=30)
-    weight: float = Field(gt=0, le=25)
-    status: ShipmentStatus = Field(default=ShipmentStatus.PLACED)
-    destination: int
 
-class ShipmentGet(Shipment):
+Content = Annotated[str, Field(max_length=30)]
+Weight = Annotated[float, Field(gt=0, le=25)]
+Destination = Annotated[int, Field(description="Destination ZIP code.")]
+
+
+class ShipmentBase(BaseModel):
+    content: Content
+    weight: Weight
+    destination: Destination
+
+
+class ShipmentCreate(ShipmentBase):
+    """Create a new Shipment. 'status' initial value is 'placed' always;
+    if a different value is sent in the request it's ignored."""
+
+
+class ShipmentReplace(ShipmentBase):
+    status: ShipmentStatus
+
+
+class ShipmentUpdate(BaseModel):
+    content: Content | None = None
+    weight: Weight | None = None
+    status: ShipmentStatus | None = None
+    destination: Destination | None = None
+
+
+class ShipmentRead(ShipmentBase):
     id: int
-
-class ShipmentPatch(BaseModel):
-    content: str|None = Field(max_length=30, default=None)
-    weight: float|None = Field(gt=0, le=25, default=None)
-    status: ShipmentStatus|None = Field(default=None)
-    destination: int|None = Field(default=None)
+    status: ShipmentStatus

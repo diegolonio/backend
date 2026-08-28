@@ -1,10 +1,10 @@
 from typing import Annotated, Literal
 from fastapi import FastAPI, status, HTTPException, Query, Depends, Response
 from scalar_fastapi import get_scalar_api_reference
-from app.schemas import Shipment, ShipmentPatch, ShipmentGet, ShipmentStatus
+from app.schemas import ShipmentCreate, ShipmentReplace, ShipmentUpdate, ShipmentRead, ShipmentStatus
 from psycopg import Connection, sql
 from psycopg.rows import class_row
-from app.database import get_connection
+from app.database.connection import get_connection
 
 app = FastAPI()
 
@@ -23,7 +23,7 @@ def get_shipments(
         conn: Annotated[Connection, Depends(get_connection)],
         destination: int|None = None,
         shipment_status: Annotated[ShipmentStatus|None, Query(alias="status")] = None,
-) -> list[ShipmentGet]:
+) -> list[ShipmentRead]:
     conditions: list[sql.Composable] = []
     params: list[object] = []
 
@@ -51,8 +51,8 @@ def get_shipments(
 def get_shipment(
         shipment_id: Annotated[int, Depends(existing_shipment_id)],
         conn: Annotated[Connection, Depends(get_connection)]
-) -> ShipmentGet:
-    with conn.cursor(row_factory=class_row(ShipmentGet)) as cur:
+) -> ShipmentRead:
+    with conn.cursor(row_factory=class_row(ShipmentRead)) as cur:
         cur.execute("SELECT id, content, weight, status, destination FROM shipments WHERE id = %s", (shipment_id,))
         return cur.fetchone()
 
@@ -63,34 +63,37 @@ def get_shipment_field(
         conn: Annotated[Connection, Depends(get_connection)]
 ) -> str|float|int:
     with conn.cursor() as cur:
-        cur.execute("SELECT id, content, weight, status, destination FROM shipments WHERE id = %s", (shipment_id,))
+        cur.execute(
+            sql.SQL("SELECT {} FROM shipments WHERE id = %s").format(sql.Identifier(field)),
+            (shipment_id,)
+        )
         return cur.fetchone()[field]
 
 @app.post("/shipments", status_code=status.HTTP_201_CREATED)
 def submit_shipment(
-        shipment: Shipment,
+        shipment: ShipmentCreate,
         conn: Annotated[Connection, Depends(get_connection)],
-        response: Response) -> ShipmentGet:
-    with conn.cursor(row_factory=class_row(ShipmentGet)) as cur:
+        response: Response) -> ShipmentRead:
+    with conn.cursor(row_factory=class_row(ShipmentRead)) as cur:
         cur.execute(
             """
-            INSERT INTO shipments (content, weight, status, destination)
-            VALUES (%(content)s, %(weight)s, %(status)s,
-                    %(destination)s) RETURNING id, content, weight, status, destination
+            INSERT INTO shipments (content, weight, destination)
+            VALUES (%(content)s, %(weight)s, %(destination)s)
+            RETURNING id, content, weight, status, destination
             """,
             shipment.model_dump(mode="json"),
         )
-        created: ShipmentGet = cur.fetchone()
+        created: ShipmentRead = cur.fetchone()
     response.headers["Location"] = f"/shipments/{created.id}"
     return created
 
 @app.put("/shipments/{shipment_id}")
 def update_shipment(
         shipment_id: Annotated[int, Depends(existing_shipment_id)],
-        shipment: Shipment,
+        shipment: ShipmentReplace,
         conn: Annotated[Connection, Depends(get_connection)]
-) -> ShipmentGet:
-    with conn.cursor(row_factory=class_row(ShipmentGet)) as cur:
+) -> ShipmentRead:
+    with conn.cursor(row_factory=class_row(ShipmentRead)) as cur:
         cur.execute(
             """
             UPDATE shipments
@@ -106,9 +109,9 @@ def update_shipment(
 @app.patch("/shipments/{shipment_id}")
 def patch_shipment(
         shipment_id: Annotated[int, Depends(existing_shipment_id)],
-        shipment_patch: ShipmentPatch,
+        shipment_patch: ShipmentUpdate,
         conn: Annotated[Connection, Depends(get_connection)]
-) -> ShipmentGet:
+) -> ShipmentRead:
     changes = shipment_patch.model_dump(mode="json", exclude_unset=True)
 
     if not changes:
@@ -126,7 +129,7 @@ def patch_shipment(
            RETURNING id, content, weight, status, destination"""
     ).format(assignments=assignments)
 
-    with conn.cursor(row_factory=class_row(ShipmentGet)) as cur:
+    with conn.cursor(row_factory=class_row(ShipmentRead)) as cur:
         cur.execute(query, {**changes, "shipment_id": shipment_id})
         return cur.fetchone()
 

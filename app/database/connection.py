@@ -5,7 +5,7 @@ from pathlib import Path
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_file=Path(__file__).resolve().parent.parent/".env",
+        env_file=Path(__file__).resolve().parents[2]/".env",
         extra="ignore"
     )
     database_url: str
