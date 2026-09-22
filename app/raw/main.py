@@ -4,7 +4,7 @@ from scalar_fastapi import get_scalar_api_reference
 from app.schemas import ShipmentCreate, ShipmentReplace, ShipmentUpdate, ShipmentRead, ShipmentStatus
 from psycopg import Connection, sql
 from psycopg.rows import class_row
-from app.database.connection import get_connection
+from app.raw.database.connection import get_connection
 
 app = FastAPI()
 
