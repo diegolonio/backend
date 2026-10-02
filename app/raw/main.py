@@ -1,14 +1,14 @@
+from scalar_fastapi import get_scalar_api_reference
 from typing import Annotated, Literal
 from fastapi import FastAPI, status, HTTPException, Query, Depends, Response
-from scalar_fastapi import get_scalar_api_reference
 from app.schemas import ShipmentCreate, ShipmentReplace, ShipmentUpdate, ShipmentRead, ShipmentStatus
-from psycopg import Connection, sql
+from psycopg import sql
 from psycopg.rows import class_row
-from app.raw.database.connection import get_connection
+from app.raw.database.connection import ConnDep
 
 app = FastAPI()
 
-def existing_shipment_id(shipment_id: int, conn: Annotated[Connection, Depends(get_connection)]) -> int:
+def existing_shipment_id(shipment_id: int, conn: ConnDep) -> int:
     with conn.cursor() as cur:
         cur.execute("SELECT 1 FROM shipments WHERE id = %s", (shipment_id,))
         if cur.fetchone() is None:
@@ -20,7 +20,7 @@ def existing_shipment_id(shipment_id: int, conn: Annotated[Connection, Depends(g
 
 @app.get("/shipments")
 def get_shipments(
-        conn: Annotated[Connection, Depends(get_connection)],
+        conn: ConnDep,
         destination: int|None = None,
         shipment_status: Annotated[ShipmentStatus|None, Query(alias="status")] = None,
 ) -> list[ShipmentRead]:
@@ -50,7 +50,7 @@ def get_shipments(
 @app.get("/shipments/{shipment_id}")
 def get_shipment(
         shipment_id: Annotated[int, Depends(existing_shipment_id)],
-        conn: Annotated[Connection, Depends(get_connection)]
+        conn: ConnDep
 ) -> ShipmentRead:
     with conn.cursor(row_factory=class_row(ShipmentRead)) as cur:
         cur.execute("SELECT id, content, weight, status, destination FROM shipments WHERE id = %s", (shipment_id,))
@@ -60,7 +60,7 @@ def get_shipment(
 def get_shipment_field(
         shipment_id: Annotated[int, Depends(existing_shipment_id)],
         field: Literal["content", "weight", "status", "destination"],
-        conn: Annotated[Connection, Depends(get_connection)]
+        conn: ConnDep
 ) -> str|float|int:
     with conn.cursor() as cur:
         cur.execute(
@@ -72,7 +72,7 @@ def get_shipment_field(
 @app.post("/shipments", status_code=status.HTTP_201_CREATED)
 def submit_shipment(
         shipment: ShipmentCreate,
-        conn: Annotated[Connection, Depends(get_connection)],
+        conn: ConnDep,
         response: Response) -> ShipmentRead:
     with conn.cursor(row_factory=class_row(ShipmentRead)) as cur:
         cur.execute(
@@ -91,7 +91,7 @@ def submit_shipment(
 def update_shipment(
         shipment_id: Annotated[int, Depends(existing_shipment_id)],
         shipment: ShipmentReplace,
-        conn: Annotated[Connection, Depends(get_connection)]
+        conn: ConnDep
 ) -> ShipmentRead:
     with conn.cursor(row_factory=class_row(ShipmentRead)) as cur:
         cur.execute(
@@ -110,7 +110,7 @@ def update_shipment(
 def patch_shipment(
         shipment_id: Annotated[int, Depends(existing_shipment_id)],
         shipment_patch: ShipmentUpdate,
-        conn: Annotated[Connection, Depends(get_connection)]
+        conn: ConnDep
 ) -> ShipmentRead:
     changes = shipment_patch.model_dump(mode="json", exclude_unset=True)
 
@@ -136,7 +136,7 @@ def patch_shipment(
 @app.delete("/shipments/{shipment_id}", status_code=status.HTTP_200_OK)
 def delete_shipment(
         shipment_id: Annotated[int, Depends(existing_shipment_id)],
-        conn: Annotated[Connection, Depends(get_connection)]
+        conn: ConnDep
 ) -> dict[str, str]:
     with conn.cursor() as cur:
         cur.execute("DELETE FROM shipments WHERE id = %s", (shipment_id,))
