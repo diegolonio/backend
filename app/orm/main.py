@@ -13,13 +13,13 @@ from rich import print, panel
 async def lifespan_handler(_app: FastAPI):
     print(panel.Panel("Server started.", border_style="green"))
     yield
-    engine.dispose()
+    await engine.dispose()
     print(panel.Panel("Server stopped.", border_style="green"))
 
 app = FastAPI(lifespan=lifespan_handler)
 
-def existing_shipment_id(shipment_id: int, session: SessionDep) -> int:
-    if not session.get(Shipment, shipment_id):
+async def existing_shipment_id(shipment_id: int, session: SessionDep) -> int:
+    if not await session.get(Shipment, shipment_id):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Given ID shipment does not exist."
@@ -29,7 +29,7 @@ def existing_shipment_id(shipment_id: int, session: SessionDep) -> int:
 IDDep = Annotated[int, Depends(existing_shipment_id)]
 
 @app.get("/shipments", response_model=list[ShipmentRead])
-def get_shipments(
+async def get_shipments(
     session: SessionDep,
     destination: int|None = None,
     shipment_status: Annotated[ShipmentStatus|None, Query(alias="status")] = None,
@@ -44,42 +44,42 @@ def get_shipments(
 
     statement = statement.order_by(col(Shipment.id))
 
-    return session.exec(statement).all()
+    return (await session.exec(statement)).all()
 
 @app.get("/shipments/{shipment_id}", response_model=ShipmentRead)
-def get_shipment(shipment_id: IDDep, session: SessionDep) -> Shipment:
+async def get_shipment(shipment_id: IDDep, session: SessionDep) -> Shipment:
     # noinspection PyTypeChecker
-    return session.get_one(Shipment, shipment_id)
+    return await session.get_one(Shipment, shipment_id)
 
 @app.get("/shipments/{shipment_id}/{field}")
-def get_shipment_field(
+async def get_shipment_field(
         shipment_id: IDDep,
         field: Literal["content", "weight", "status", "destination"],
         session: SessionDep
 ) -> str|float|int:
-    shipment = session.get_one(Shipment, shipment_id)
+    shipment = await session.get_one(Shipment, shipment_id)
     return getattr(shipment, field)
 
 @app.post("/shipments", status_code=status.HTTP_201_CREATED, response_model=ShipmentRead)
-def submit_shipment(shipment: ShipmentCreate, session: SessionDep, response: Response) -> Shipment:
+async def submit_shipment(shipment: ShipmentCreate, session: SessionDep, response: Response) -> Shipment:
     new_shipment = Shipment(**shipment.model_dump())
     session.add(new_shipment)
-    session.commit()
-    session.refresh(new_shipment)
+    await session.commit()
+    await session.refresh(new_shipment)
     response.headers["Location"] = f"/shipments/{new_shipment.id}"
     return new_shipment
 
 @app.put("/shipments/{shipment_id}", response_model=ShipmentRead)
-def update_shipment(shipment_id: IDDep, shipment: ShipmentReplace, session: SessionDep) -> Shipment:
+async def update_shipment(shipment_id: IDDep, shipment: ShipmentReplace, session: SessionDep) -> Shipment:
     # noinspection PyTypeChecker
-    stored_shipment: Shipment = session.get_one(Shipment, shipment_id)
+    stored_shipment: Shipment = await session.get_one(Shipment, shipment_id)
     stored_shipment.sqlmodel_update(shipment.model_dump())
-    session.commit()
-    session.refresh(stored_shipment)
+    await session.commit()
+    await session.refresh(stored_shipment)
     return stored_shipment
 
 @app.patch("/shipments/{shipment_id}", response_model=ShipmentRead)
-def patch_shipment(shipment_id: IDDep, shipment_patch: ShipmentUpdate, session: SessionDep) -> Shipment:
+async def patch_shipment(shipment_id: IDDep, shipment_patch: ShipmentUpdate, session: SessionDep) -> Shipment:
     changes = shipment_patch.model_dump(exclude_unset=True)
 
     if not changes:
@@ -89,16 +89,16 @@ def patch_shipment(shipment_id: IDDep, shipment_patch: ShipmentUpdate, session: 
         )
 
     # noinspection PyTypeChecker
-    stored_shipment: Shipment = session.get_one(Shipment, shipment_id)
+    stored_shipment: Shipment = await session.get_one(Shipment, shipment_id)
     stored_shipment.sqlmodel_update(changes)
-    session.commit()
-    session.refresh(stored_shipment)
+    await session.commit()
+    await session.refresh(stored_shipment)
     return stored_shipment
 
 @app.delete("/shipments/{shipment_id}", status_code=status.HTTP_200_OK)
-def delete_shipment(shipment_id: IDDep, session: SessionDep) -> dict[str, str]:
-    session.delete(session.get_one(Shipment, shipment_id))
-    session.commit()
+async def delete_shipment(shipment_id: IDDep, session: SessionDep) -> dict[str, str]:
+    await session.delete(await session.get_one(Shipment, shipment_id))
+    await session.commit()
     return {"detail": f"Shipment #{shipment_id} deleted"}
 
 

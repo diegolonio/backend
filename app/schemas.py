@@ -1,3 +1,4 @@
+from datetime import datetime
 from enum import StrEnum
 from typing import Annotated
 from pydantic import BaseModel, Field
@@ -41,3 +42,4 @@ class ShipmentUpdate(BaseModel):
 class ShipmentRead(ShipmentBase):
     id: int
     status: ShipmentStatus
+    created_at: datetime

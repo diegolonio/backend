@@ -1,4 +1,6 @@
+from datetime import datetime
 from typing import Annotated
+from sqlalchemy import DateTime, func
 from sqlalchemy.dialects.postgresql import ENUM
 from sqlmodel import SQLModel, Field, Column
 from app.schemas import ShipmentStatus
@@ -21,4 +23,8 @@ class Shipment(SQLModel, table=True):
     status: ShipmentStatus = Field(
         default=ShipmentStatus.PLACED,
         sa_column=Column(shipment_status_type, nullable=False)
+    )
+    created_at: datetime | None = Field(
+        default=None,
+        sa_column=Column(DateTime(timezone=True), nullable=False, server_default=func.now())
     )

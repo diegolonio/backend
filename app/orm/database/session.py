@@ -1,16 +1,22 @@
 from typing import Annotated
 from fastapi import Depends
-from sqlalchemy import create_engine
-from sqlmodel import Session
+from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
+from sqlmodel.ext.asyncio.session import AsyncSession
 from app.database.config import settings
 
-engine = create_engine(
+engine = create_async_engine(
     url=settings.database_url.replace("postgresql://", "postgresql+psycopg://"),
-    echo=False
+    echo=True
 )
 
-def get_session():
-    with Session(bind=engine) as session:
+async_session = async_sessionmaker(
+    bind=engine,
+    class_=AsyncSession,
+    expire_on_commit=False
+)
+
+async def get_session():
+    async with async_session() as session:
         yield session
 
-SessionDep = Annotated[Session, Depends(get_session)]
+SessionDep = Annotated[AsyncSession, Depends(get_session)]
