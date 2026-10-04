@@ -4,7 +4,6 @@ from fastapi import Depends
 from psycopg import AsyncConnection
 from psycopg.rows import dict_row, DictRow
 from psycopg_pool import AsyncConnectionPool
-
 from app.database.config import settings
 
 # Opened and closed by the app lifespan (an async pool can't be opened at import time)

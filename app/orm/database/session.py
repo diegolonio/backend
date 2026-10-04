@@ -6,7 +6,7 @@ from app.database.config import settings
 
 engine = create_async_engine(
     url=settings.database_url.replace("postgresql://", "postgresql+psycopg://"),
-    echo=True
+    echo=False
 )
 
 async_session = async_sessionmaker(

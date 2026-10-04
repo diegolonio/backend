@@ -1,19 +1,11 @@
-from contextlib import asynccontextmanager
-from scalar_fastapi import get_scalar_api_reference
 from typing import Annotated, Literal
-from fastapi import FastAPI, status, HTTPException, Query, Depends, Response
+from fastapi import APIRouter, status, HTTPException, Query, Depends, Response
 from app.schemas import ShipmentCreate, ShipmentReplace, ShipmentUpdate, ShipmentRead, ShipmentStatus
 from psycopg import sql
 from psycopg.rows import class_row
-from app.raw.database.connection import ConnDep, pool
+from app.raw.database.connection import ConnDep
 
-@asynccontextmanager
-async def lifespan_handler(_app: FastAPI):
-    await pool.open()
-    yield
-    await pool.close()
-
-app = FastAPI(lifespan=lifespan_handler)
+router = APIRouter(prefix="/raw", tags=["Raw"])
 
 async def existing_shipment_id(shipment_id: int, conn: ConnDep) -> int:
     async with conn.cursor() as cur:
@@ -25,7 +17,7 @@ async def existing_shipment_id(shipment_id: int, conn: ConnDep) -> int:
             )
     return shipment_id
 
-@app.get("/shipments")
+@router.get("/shipments")
 async def get_shipments(
         conn: ConnDep,
         destination: int|None = None,
@@ -54,7 +46,7 @@ async def get_shipments(
         await cur.execute(sql.SQL(" ").join(parts), params)
         return await cur.fetchall()
 
-@app.get("/shipments/{shipment_id}")
+@router.get("/shipments/{shipment_id}")
 async def get_shipment(
         shipment_id: Annotated[int, Depends(existing_shipment_id)],
         conn: ConnDep
@@ -63,7 +55,7 @@ async def get_shipment(
         await cur.execute("SELECT id, content, weight, status, destination, created_at FROM shipments WHERE id = %s", (shipment_id,))
         return await cur.fetchone()
 
-@app.get("/shipments/{shipment_id}/{field}")
+@router.get("/shipments/{shipment_id}/{field}")
 async def get_shipment_field(
         shipment_id: Annotated[int, Depends(existing_shipment_id)],
         field: Literal["content", "weight", "status", "destination"],
@@ -76,7 +68,7 @@ async def get_shipment_field(
         )
         return (await cur.fetchone())[field]
 
-@app.post("/shipments", status_code=status.HTTP_201_CREATED)
+@router.post("/shipments", status_code=status.HTTP_201_CREATED)
 async def submit_shipment(
         shipment: ShipmentCreate,
         conn: ConnDep,
@@ -91,10 +83,10 @@ async def submit_shipment(
             shipment.model_dump(mode="json"),
         )
         created: ShipmentRead = await cur.fetchone()
-    response.headers["Location"] = f"/shipments/{created.id}"
+    response.headers["Location"] = f"{router.prefix}/shipments/{created.id}"
     return created
 
-@app.put("/shipments/{shipment_id}")
+@router.put("/shipments/{shipment_id}")
 async def update_shipment(
         shipment_id: Annotated[int, Depends(existing_shipment_id)],
         shipment: ShipmentReplace,
@@ -113,7 +105,7 @@ async def update_shipment(
         )
         return await cur.fetchone()
 
-@app.patch("/shipments/{shipment_id}")
+@router.patch("/shipments/{shipment_id}")
 async def patch_shipment(
         shipment_id: Annotated[int, Depends(existing_shipment_id)],
         shipment_patch: ShipmentUpdate,
@@ -140,7 +132,7 @@ async def patch_shipment(
         await cur.execute(query, {**changes, "shipment_id": shipment_id})
         return await cur.fetchone()
 
-@app.delete("/shipments/{shipment_id}", status_code=status.HTTP_200_OK)
+@router.delete("/shipments/{shipment_id}", status_code=status.HTTP_200_OK)
 async def delete_shipment(
         shipment_id: Annotated[int, Depends(existing_shipment_id)],
         conn: ConnDep
@@ -148,12 +140,3 @@ async def delete_shipment(
     async with conn.cursor() as cur:
         await cur.execute("DELETE FROM shipments WHERE id = %s", (shipment_id,))
     return {"detail": f"Shipment #{shipment_id} deleted"}
-
-
-# Scalar documentation
-@app.get("/scalar", include_in_schema=False)
-def get_scalar_docs():
-    return get_scalar_api_reference(
-        openapi_url=app.openapi_url,
-        title="Scalar API"
-    )
