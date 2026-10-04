@@ -1,7 +1,7 @@
 from datetime import datetime
 from enum import StrEnum
 from typing import Annotated
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, StringConstraints
 
 
 class ShipmentStatus(StrEnum):
@@ -12,9 +12,11 @@ class ShipmentStatus(StrEnum):
     DELIVERED = "delivered"
 
 
-Content = Annotated[str, Field(max_length=30)]
-Weight = Annotated[float, Field(gt=0, le=25)]
-Destination = Annotated[int, Field(description="Destination ZIP code.")]
+# Mirrors the DB check: length(trim(content)) > 0
+Content = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=30)]
+# DECIMAL(4, 2): values below 0.01 round to 0.00 and fail the DB check
+Weight = Annotated[float, Field(ge=0.01, le=25)]
+Destination = Annotated[int, Field(ge=1, le=99999, description="Destination ZIP code.")]
 
 
 class ShipmentBase(BaseModel):
