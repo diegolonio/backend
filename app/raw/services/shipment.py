@@ -22,7 +22,7 @@ class RawShipmentService:
 
         return shipment
 
-    async def get_all(self, destination: int|None = None, status: ShipmentStatus|None = None) -> list[ShipmentRead]:
+    async def get_all(self, destination: str|None = None, status: ShipmentStatus|None = None) -> list[ShipmentRead]:
         conditions: list[sql.Composable] = []
         params: list[object] = []
 

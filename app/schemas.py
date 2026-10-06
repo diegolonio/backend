@@ -16,7 +16,8 @@ class ShipmentStatus(StrEnum):
 Content = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=30)]
 # DECIMAL(4, 2): values below 0.01 round to 0.00 and fail the DB check
 Weight = Annotated[float, Field(ge=0.01, le=25)]
-Destination = Annotated[int, Field(ge=1, le=99999, description="Destination ZIP code.")]
+# ZIP codes can start with 0 (e.g. 06200), so they are strings, not numbers
+Destination = Annotated[str, Field(pattern=r"^\d{5}$", description="Destination ZIP code.")]
 
 
 class ShipmentBase(BaseModel):

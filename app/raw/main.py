@@ -1,6 +1,6 @@
 from typing import Annotated, Literal
 from fastapi import APIRouter, HTTPException, status, Query, Response
-from app.schemas import ShipmentRead, ShipmentStatus, ShipmentCreate, ShipmentReplace, ShipmentUpdate
+from app.schemas import Destination, ShipmentRead, ShipmentStatus, ShipmentCreate, ShipmentReplace, ShipmentUpdate
 from app.raw.dependencies import ShipmentServiceDep
 
 router = APIRouter(prefix="/raw", tags=["Raw"])
@@ -8,7 +8,7 @@ router = APIRouter(prefix="/raw", tags=["Raw"])
 @router.get("/shipments")
 async def get_shipments(
         service: ShipmentServiceDep,
-        destination: int|None = None,
+        destination: Destination|None = None,
         shipment_status: Annotated[ShipmentStatus|None, Query(alias="status")] = None,
     ) -> list[ShipmentRead]:
     return await service.get_all(destination=destination, status=shipment_status)

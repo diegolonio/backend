@@ -19,7 +19,7 @@ class OrmShipmentService:
 
         return ShipmentRead.model_validate(shipment, from_attributes=True)
 
-    async def get_all(self, destination: int|None = None, status: ShipmentStatus|None = None) -> list[ShipmentRead]:
+    async def get_all(self, destination: str|None = None, status: ShipmentStatus|None = None) -> list[ShipmentRead]:
         statement = select(Shipment)
 
         if destination is not None:

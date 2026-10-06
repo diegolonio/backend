@@ -19,7 +19,7 @@ class Shipment(SQLModel, table=True):
     id: Annotated[int|None, Field(default=None, primary_key=True)]
     content: Annotated[str, Field(max_length=30)]
     weight: Annotated[float, Field(gt=0, le=25)]
-    destination: int
+    destination: Annotated[str, Field(max_length=5)]
     status: ShipmentStatus = Field(
         default=ShipmentStatus.PLACED,
         sa_column=Column(shipment_status_type, nullable=False)
