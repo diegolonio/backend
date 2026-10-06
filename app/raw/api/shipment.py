@@ -1,9 +1,9 @@
 from typing import Annotated, Literal
 from fastapi import APIRouter, HTTPException, status, Query, Response
 from app.schemas import Destination, ShipmentRead, ShipmentStatus, ShipmentCreate, ShipmentReplace, ShipmentUpdate
-from app.orm.dependencies import ShipmentServiceDep
+from app.raw.api.dependencies import ShipmentServiceDep
 
-router = APIRouter(prefix="/orm", tags=["ORM"])
+router = APIRouter(prefix="/raw", tags=["Raw"])
 
 @router.get("/shipments")
 async def get_shipments(

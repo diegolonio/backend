@@ -3,8 +3,8 @@ from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
 from contextlib import asynccontextmanager
 from rich import print, panel
-from app.orm.main import router as orm_router
-from app.raw.main import router as raw_router
+from app.orm.api.shipment import router as orm_router
+from app.raw.api.shipment import router as raw_router
 from app.orm.database.session import engine
 from app.raw.database.connection import pool
 from app.services.shipment import ShipmentNotFound
