@@ -25,7 +25,10 @@ app = FastAPI(lifespan=lifespan_handler)
 
 @app.exception_handler(ShipmentNotFound)
 async def shipment_not_found_handler(_request: Request, exc: ShipmentNotFound) -> JSONResponse:
-    return JSONResponse(status_code=status.HTTP_404_NOT_FOUND, content={"detail": str(exc)})
+    return JSONResponse(
+        status_code=status.HTTP_404_NOT_FOUND,
+        content={"detail": str(exc)}
+    )
 
 
 app.include_router(orm_router)
